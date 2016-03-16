@@ -1,0 +1,57 @@
+<h3>Accessing the Database</h3>
+
+<p>Now that you&rsquo;ve loaded the driver package, you&rsquo;re ready to create a database
+object, a <code>sql.DB</code>.</p>
+
+<p>To create a <code>sql.DB</code>, you use <code>sql.Open()</code>. This returns a <code>*sql.DB</code>:</p>
+
+<pre><code class="language-go">func main() {
+    db, err := sql.Open(&quot;mysql&quot;,
+        &quot;user:password@tcp(127.0.0.1:3306)/hello&quot;)
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer db.Close()
+}
+</code></pre>
+
+<p>In the example shown, we&rsquo;re illustrating several things:</p>
+
+<ol>
+<li>The first argument to <code>sql.Open</code> is the driver name. This is the string that the driver used to register itself with <code>database/sql</code>, and is conventionally the same as the package name to avoid confusion. For example, it&rsquo;s <code>mysql</code> for <a href="https://github.com/go-sql-driver/mysql">github.com/go-sql-driver/mysql</a>. Some drivers do not follow the convention and use the database name, e.g. <code>sqlite3</code> for <a href="https://github.com/mattn/go-sqlite3">github.com/mattn/go-sqlite3</a> and <code>postgres</code> for <a href="https://github.com/lib/pq">github.com/lib/pq</a>.</li>
+<li>The second argument is a driver-specific syntax that tells the driver how to access the underlying datastore. In this example, we&rsquo;re connecting to the &ldquo;hello&rdquo; database inside a local MySQL server instance.</li>
+<li>You should (almost) always check and handle errors returned from all <code>database/sql</code> operations.  There are a few special cases that we&rsquo;ll discuss later where it doesn&rsquo;t make sense to do this.</li>
+<li>It is idiomatic to <code>defer db.Close()</code> if the <code>sql.DB</code> should not have a lifetime beyond the scope of the function.</li>
+</ol>
+
+<p>Perhaps counter-intuitively, <code>sql.Open()</code> <strong>does not establish any connections
+to the database</strong>, nor does it validate driver connection parameters. Instead,
+it simply prepares the database abstraction for later use. The first actual
+connection to the underlying datastore will be established lazily, when it&rsquo;s
+needed for the first time. If you want to check right away that the database is
+available and accessible (for example, check that you can establish a network
+connection and log in), use <code>db.Ping()</code> to do that, and remember to check for
+errors:</p>
+
+<pre><code class="language-go">err = db.Ping()
+if err != nil {
+    // do something here
+}
+</code></pre>
+
+<p>Although it&rsquo;s idiomatic to <code>Close()</code> the database when you&rsquo;re finished with it,
+<strong>the <code>sql.DB</code> object is designed to be long-lived.</strong> Don&rsquo;t <code>Open()</code> and
+<code>Close()</code> databases frequently. Instead, create <strong>one</strong> <code>sql.DB</code> object for each
+distinct datastore you need to access, and keep it until the program is done
+accessing that datastore. Pass it around as needed, or make it available somehow
+globally, but keep it open. And don&rsquo;t <code>Open()</code> and <code>Close()</code> from a short-lived
+function. Instead, pass the <code>sql.DB</code> into that short-lived function as an
+argument.</p>
+
+<p>If you don&rsquo;t treat the <code>sql.DB</code> as a long-lived object, you could experience
+problems such as poor reuse and sharing of connections, running out of available
+network resources, or sporadic failures due to a lot of TCP connections
+remaining in <code>TIME_WAIT</code> status. Such problems are signs that you&rsquo;re not using
+<code>database/sql</code> as it was designed.</p>
+
+<p>Now it&rsquo;s time to use your <code>sql.DB</code> object.</p>

@@ -1,0 +1,15 @@
+<h3>Connection Pooling</h3>
+
+<p>There is a basic connection pool in the <code>database/sql</code> package. There isn&rsquo;t a
+lot of ability to control or inspect it, but here are some things you might find
+useful to know:</p>
+
+<ul>
+<li>Connection pooling means that executing two consecutive statements on a single database might open two connections and execute them separately. It is fairly common for programmers to be confused as to why their code misbehaves. For example, <code>LOCK TABLES</code> followed by an <code>INSERT</code> can block because the <code>INSERT</code> is on a connection that does not hold the table lock.</li>
+<li>Connections are created when needed and there isn&rsquo;t a free connection in the pool.</li>
+<li>By default, there&rsquo;s no limit on the number of connections. If you try to do a lot of things at once, you can create an arbitrary number of connections. This can cause the database to return an error such as &ldquo;too many connections.&rdquo;</li>
+<li>In Go 1.1 or newer, you can use <code>db.SetMaxIdleConns(N)</code> to limit the number of <em>idle</em> connections in the pool. This doesn&rsquo;t limit the pool size, though.</li>
+<li>In Go 1.2.1 or newer, you can use <code>db.SetMaxOpenConns(N)</code> to limit the number of <em>total</em> open connections to the database. Unfortunately, a <a href="https://groups.google.com/d/msg/golang-dev/jOTqHxI09ns/x79ajll-ab4J">deadlock bug</a> (<a href="https://code.google.com/p/go/source/detail?r=8a7ac002f840">fix</a>) prevents <code>db.SetMaxOpenConns(N)</code> from safely being used in 1.2.</li>
+<li>Connections are recycled rather fast. Setting a high number of idle connections with <code>db.SetMaxIdleConns(N)</code> can reduce this churn, and help keep connections around for reuse.</li>
+<li>Keeping a connection idle for a long time can cause problems (like in <a href="https://github.com/go-sql-driver/mysql/issues/257">this issue</a> with MySQL on Microsoft Azure). Try <code>db.SetMaxIdleConns(0)</code> if you get connection timeouts because a connection is idle for too long.</li>
+</ul>

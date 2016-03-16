@@ -1,0 +1,27 @@
+<h3>Single-Row Queries</h3>
+
+<p>If a query returns at most one row, you can use a shortcut around some of the
+lengthy boilerplate code:</p>
+
+<pre><code class="language-go">var name string
+err = db.QueryRow(&quot;select name from users where id = ?&quot;, 1).Scan(&amp;name)
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Println(name)
+</code></pre>
+
+<p>Errors from the query are deferred until <code>Scan()</code> is called, and then are
+returned from that. You can also call <code>QueryRow()</code> on a prepared statement:</p>
+
+<pre><code class="language-go">stmt, err := db.Prepare(&quot;select name from users where id = ?&quot;)
+if err != nil {
+    log.Fatal(err)
+}
+var name string
+err = stmt.QueryRow(1).Scan(&amp;name)
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Println(name)
+</code></pre>

@@ -1,0 +1,22 @@
+<h3>Retrieving Results</h3>
+
+<p>There are several idiomatic operations to retrieve results from the datastore.</p>
+
+<ol>
+<li>Execute a query that returns rows.</li>
+<li>Prepare a statement for repeated use, execute it multiple times, and destroy it.</li>
+<li>Execute a statement in a once-off fashion, without preparing it for repeated use.</li>
+<li>Execute a query that returns a single row. There is a shortcut for this special case.</li>
+</ol>
+
+<p>Go&rsquo;s <code>database/sql</code> function names are significant. <strong>If a function name
+includes <code>Query</code>, it is designed to ask a question of the database, and will
+return a set of rows</strong>, even if it&rsquo;s empty. Statements that don&rsquo;t return rows
+should not use <code>Query</code> functions; they should use <code>Exec()</code>.</p>
+
+<ul>
+<li><a href="#fetch">Fetching Data from the Database</a></li>
+<li><a href="#scan">How Scan() Works</a></li>
+<li><a href="#prepare">Preparing Queries</a></li>
+<li><a href="#singlerow">Single-Row Queries</a></li>
+</ul>

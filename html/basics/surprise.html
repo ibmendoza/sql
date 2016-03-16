@@ -1,0 +1,130 @@
+<h3>Surprises, Antipatterns and Limitations</h3>
+
+<p>Although <code>database/sql</code> is simple once you&rsquo;re accustomed to it, you might be
+surprised by the subtlety of use cases it supports. This is common to Go&rsquo;s core
+libraries.</p>
+
+<p><strong>Resource Exhaustion</strong></p>
+
+<p>As mentioned throughout this site, if you don&rsquo;t use <code>database/sql</code> as intended,
+you can certainly cause trouble for yourself, usually by consuming some
+resources or preventing them from being reused effectively:</p>
+
+<ul>
+<li>Opening and closing databases can cause exhaustion of resources.</li>
+<li>Failing to read all rows or use <code>rows.Close()</code> reserves connections from the pool.</li>
+<li>Using <code>Query()</code> for a statement that doesn&rsquo;t return rows will reserve a connection from the pool.</li>
+<li>Failing to be aware of how <a href="prepared.html">prepared statements</a> work can lead to a lot of extra database activity.</li>
+</ul>
+
+<p><strong>Large uint64 Values</strong></p>
+
+<p>Here&rsquo;s a surprising error. You can&rsquo;t pass big unsigned integers as parameters to
+statements if their high bit is set:</p>
+
+<pre><code class="language-go">_, err := db.Exec(&quot;INSERT INTO users(id) VALUES&quot;, math.MaxUint64) // Error
+</code></pre>
+
+<p>This will throw an error. Be careful if you use <code>uint64</code> values, as they may
+start out small and work without error, but increment over time and start
+throwing errors.</p>
+
+<p><strong>Connection State Mismatch</strong></p>
+
+<p>Some things can change connection state, and that can cause problems for two
+reasons:</p>
+
+<ol>
+<li>Some connection state, such as whether you&rsquo;re in a transaction, should be
+handled through the Go types instead.</li>
+<li>You might be assuming that your queries run on a single connection when they
+don&rsquo;t.</li>
+</ol>
+
+<p>For example, setting the current database with a <code>USE</code> statement is a typical
+thing for many people to do. But in Go, it will affect only the connection that
+you run it in. Unless you are in a transaction, other statements that you think
+are executed on that connection may actually run on different connections gotten
+from the pool, so they won&rsquo;t see the effects of such changes.</p>
+
+<p>Additionally, after you&rsquo;ve changed the connection, it&rsquo;ll return to the pool and
+potentially pollute the state for some other code. This is one of the reasons
+why you should never issue BEGIN or COMMIT statements as SQL commands directly,
+too.</p>
+
+<p><strong>Database-Specific Syntax</strong></p>
+
+<p>The <code>database/sql</code> API provides an abstraction of a row-oriented database, but
+specific databases and drivers can differ in behavior and/or syntax, such as
+<a href="prepared.html">prepared statement placeholders</a>.</p>
+
+<p><strong>Multiple Result Sets</strong></p>
+
+<p>The Go driver doesn&rsquo;t support multiple result sets from a single query in any
+way, and there doesn&rsquo;t seem to be any plan to do that, although there is <a href="https://github.com/golang/go/issues/5171">a
+feature request</a> for
+supporting bulk operations such as bulk copy.</p>
+
+<p>This means, among other things, that a stored procedure that returns multiple
+result sets will not work correctly.</p>
+
+<p><strong>Invoking Stored Procedures</strong></p>
+
+<p>Invoking stored procedures is driver-specific, but in the MySQL driver it can&rsquo;t
+be done at present. It might seem that you&rsquo;d be able to call a simple
+procedure that returns a single result set, by executing something like this:</p>
+
+<pre><code class="language-go">err := db.QueryRow(&quot;CALL mydb.myprocedure&quot;).Scan(&amp;amp;result) // Error
+</code></pre>
+
+<p>In fact, this won&rsquo;t work. You&rsquo;ll get the following error: <em>Error
+1312: PROCEDURE mydb.myprocedure can&rsquo;t return a result set in the given
+context</em>. This is because MySQL expects the connection to be set into
+multi-statement mode, even for a single result, and the driver doesn&rsquo;t currently
+do that (though see <a href="https://github.com/go-sql-driver/mysql/issues/66">this
+issue</a>).</p>
+
+<p><strong>Multiple Statement Support</strong></p>
+
+<p>The <code>database/sql</code> doesn&rsquo;t explicitly have multiple statement support, which means
+that the behavior of this is backend dependent:</p>
+
+<pre><code class="language-go">_, err := db.Exec(&quot;DELETE FROM tbl1; DELETE FROM tbl2&quot;) // Error/unpredictable result
+</code></pre>
+
+<p>The server is allowed to interpret this however it wants, which can include
+returning an error, executing only the first statement, or executing both.</p>
+
+<p>Similarly, there is no way to batch statements in a transaction. Each statement
+in a transaction must be executed serially, and the resources in the results,
+such as a Row or Rows, must be scanned or closed so the underlying connection is free
+for the next statement to use. This differs from the usual behavior when you&rsquo;re
+not working with a transaction. In that scenario, it is perfectly possible to
+execute a query, loop over the rows, and within the loop make a query to the
+database (which will happen on a new connection):</p>
+
+<pre><code class="language-go">rows, err := db.Query(&quot;select * from tbl1&quot;) // Uses connection 1
+for rows.Next() {
+    err = rows.Scan(&amp;myvariable)
+    // The following line will NOT use connection 1, which is already in-use
+   db.Query(&quot;select * from tbl2 where id = ?&quot;, myvariable)
+}
+</code></pre>
+
+<p>But transactions are bound to
+just one connection, so this isn&rsquo;t possible with a transaction:</p>
+
+<pre><code class="language-go">tx, err := db.Begin()
+rows, err := tx.Query(&quot;select * from tbl1&quot;) // Uses tx's connection
+for rows.Next() {
+    err = rows.Scan(&amp;myvariable)
+    // ERROR! tx's connection is already busy!
+   tx.Query(&quot;select * from tbl2 where id = ?&quot;, myvariable)
+}
+</code></pre>
+
+<p>Go doesn&rsquo;t stop you from trying, though. For that reason, you may wind up with a
+corrupted connection if you attempt to perform another statement before the
+first has released its resources and cleaned up after itself.  This also means
+that each statement in a transaction results in a separate set of network
+round-trips to the database.</p>

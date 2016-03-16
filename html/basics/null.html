@@ -1,0 +1,36 @@
+<h3>Working with NULL</h3>
+
+<p>Nullable columns are annoying and lead to a lot of ugly code. If you can, avoid
+them. If not, then you&rsquo;ll need to use special types from the <code>database/sql</code>
+package to handle them, or define your own.</p>
+
+<p>There are types for nullable booleans, strings, integers, and floats. Here&rsquo;s how
+you use them:</p>
+
+<pre><code class="language-go">for rows.Next() {
+    var s sql.NullString
+    err := rows.Scan(&amp;amp;s)
+    // check err
+    if s.Valid {
+       // use s.String
+    } else {
+       // NULL value
+    }
+}
+</code></pre>
+
+<p>Limitations of the nullable types, and reasons to avoid nullable columns in case
+you need more convincing:</p>
+
+<ol>
+<li>There&rsquo;s no <code>sql.NullUint64</code> or <code>sql.NullYourFavoriteType</code>. You&rsquo;d need to
+define your own for this.</li>
+<li>Nullability can be tricky, and not future-proof. If you think something won&rsquo;t
+be null, but you&rsquo;re wrong, your program will crash, perhaps rarely enough
+that you won&rsquo;t catch errors before you ship them.</li>
+<li>One of the nice things about Go is having a useful default zero-value for
+every variable. This isn&rsquo;t the way nullable things work.</li>
+</ol>
+
+<p>If you need to define your own types to handle NULLs, you can copy the design of
+<code>sql.NullString</code> to achieve that.</p>

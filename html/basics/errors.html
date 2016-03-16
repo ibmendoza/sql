@@ -1,0 +1,160 @@
+<h3>Handling Errors</h3>
+
+<p>Almost all operations with <code>database/sql</code> types return an error as the last
+value. You should always check these errors, never ignore them.</p>
+
+<p>There are a few places where error behavior is special-case, or there&rsquo;s
+something additional you might need to know.</p>
+
+<p><strong>Errors From Iterating Resultsets</strong></p>
+
+<p>Consider the following code:</p>
+
+<pre><code class="language-go">for rows.Next() {
+    // ...
+}
+if err = rows.Err(); err != nil {
+    // handle the error here
+}
+</code></pre>
+
+<p>The error from <code>rows.Err()</code> could be the result of a variety of errors in the
+<code>rows.Next()</code> loop. The loop
+might exit for some reason other than finishing the loop normally, so you always
+need to check whether the loop terminated normally or not. An abnormal
+termination automatically calls <code>rows.Close()</code>, although it&rsquo;s harmless to call it
+multiple times.</p>
+
+<p><strong>Errors From Closing Resultsets</strong></p>
+
+<p>You should always explicitly close a <code>sql.Rows</code> if you exit the loop
+prematurely, as previously mentioned. It&rsquo;s auto-closed if the loop exits
+normally or through an error, but you might mistakenly do this:</p>
+
+<pre><code class="language-go">for rows.Next() {
+    // ...
+    break; // whoops, rows is not closed! memory leak...
+}
+// do the usual &quot;if err = rows.Err()&quot; [omitted here]...
+// it's always safe to [re?]close here:
+if err = rows.Close(); err != nil {
+    // but what should we do if there's an error?
+    log.Println(err)
+}
+</code></pre>
+
+<p>The error returned by <code>rows.Close()</code> is the only exception to the general rule
+that it&rsquo;s best to capture and check for errors in all database operations. If
+<code>rows.Close()</code> returns an error, it&rsquo;s unclear what you should do.
+Logging the error message or panicing might be the only sensible thing,
+and if that&rsquo;s not sensible, then perhaps you should just ignore the error.</p>
+
+<p><strong>Errors From QueryRow()</strong></p>
+
+<p>Consider the following code to fetch a single row:</p>
+
+<pre><code class="language-go">var name string
+err = db.QueryRow(&quot;select name from users where id = ?&quot;, 1).Scan(&amp;amp;name)
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Println(name)
+</code></pre>
+
+<p>What if there was no user with <code>id = 1</code>? Then there would be no row in the
+result, and <code>.Scan()</code> would not scan a value into <code>name</code>. What happens then?</p>
+
+<p>Go defines a special error constant, called <code>sql.ErrNoRows</code>, which is returned
+from <code>QueryRow()</code> when the result is empty. This needs to be handled as a
+special case in most circumstances. An empty result is often not considered an
+error by application code, and if you don&rsquo;t check whether an error is this
+special constant, you&rsquo;ll cause application-code errors you didn&rsquo;t expect.</p>
+
+<p>Errors from the query are deferred until <code>Scan()</code> is called, and then are
+returned from that. The above code is better written like this instead:</p>
+
+<pre><code class="language-go">var name string
+err = db.QueryRow(&quot;select name from users where id = ?&quot;, 1).Scan(&amp;amp;name)
+if err != nil {
+    if err == sql.ErrNoRows {
+        // there were no rows, but otherwise no error occurred
+    } else {
+        log.Fatal(err)
+    }
+}
+fmt.Println(name)
+</code></pre>
+
+<p>One might ask why an empty result set is considered an error. There&rsquo;s nothing
+erroneous about an empty set. The reason is that the <code>QueryRow()</code> method needs
+to use this special-case in order to let the caller distinguish whether
+<code>QueryRow()</code> in fact found a row; without it, <code>Scan()</code> wouldn&rsquo;t do anything and
+you might not realize that your variable didn&rsquo;t get any value from the database
+after all.</p>
+
+<p>You should not run into this error when you&rsquo;re not using <code>QueryRow()</code>. If you
+encounter this error elsewhere, you&rsquo;re doing something wrong.</p>
+
+<p><strong>Identifying Specific Database Errors</strong></p>
+
+<p>It can be tempting to write code like the following:</p>
+
+<pre><code class="language-go">rows, err := db.Query(&quot;SELECT someval FROM sometable&quot;)
+// err contains:
+// ERROR 1045 (28000): Access denied for user 'foo'@'::1' (using password: NO)
+if strings.Contains(err.Error(), &quot;Access denied&quot;) {
+    // Handle the permission-denied error
+}
+</code></pre>
+
+<p>This is not the best way to do it, though. For example, the string value might
+vary depending on what language the server uses to send error messages.  It&rsquo;s
+much better to compare error numbers to identify what a specific error is.</p>
+
+<p>The mechanism to do this varies between drivers, however, because this isn&rsquo;t
+part of <code>database/sql</code> itself. In the MySQL driver that this tutorial focuses
+on, you could write the following code:</p>
+
+<pre><code class="language-go">if driverErr, ok := err.(*mysql.MySQLError); ok { // Now the error number is accessible directly
+    if driverErr.Number == 1045 {
+        // Handle the permission-denied error
+    }
+}
+</code></pre>
+
+<p>Again, the <code>MySQLError</code> type here is provided by this specific driver, and the
+<code>.Number</code> field may differ between drivers. The value of the number, however,
+is taken from MySQL&rsquo;s error message, and is therefore database specific, not
+driver specific.</p>
+
+<p>This code is still ugly. Comparing to 1045, a magic number, is a code smell.
+Some drivers (though not the MySQL one, for reasons that are off-topic here)
+provide a list of error identifiers. The Postgres <code>pq</code> driver does, for example, in
+<a href="https://github.com/lib/pq/blob/master/error.go">error.go</a>. And there&rsquo;s an
+external package of <a href="https://github.com/VividCortex/mysqlerr">MySQL error numbers maintained by
+VividCortex</a>. Using such a list, the
+above code is better written thus:</p>
+
+<pre><code class="language-go">if driverErr, ok := err.(*mysql.MySQLError); ok {
+    if driverErr.Number == mysqlerr.ER_ACCESS_DENIED_ERROR {
+        // Handle the permission-denied error
+    }
+}
+</code></pre>
+
+<p><strong>Handling Connection Errors</strong></p>
+
+<p>What if your connection to the database is dropped, killed, or has an error?</p>
+
+<p>You don&rsquo;t need to implement any logic to retry failed statements when this
+happens. As part of the <a href="connection-pool.html">connection pooling</a> in
+<code>database/sql</code>, handling failed connections is built-in. If you execute a query
+or other statement and the underlying connection has a failure, Go will reopen a
+new connection (or just get another from the connection pool) and retry, up to
+10 times.</p>
+
+<p>There can be some unintended consequences, however. Some types of errors may be
+retried when other error conditions happen. This might also be driver-specific.
+One example that has occurred with the MySQL driver is that using <code>KILL</code> to
+cancel an undesired statement (such as a long-running query) results in the
+statement being retried up to 10 times.</p>

@@ -1,0 +1,19 @@
+<h3>How Scan() Works</h3>
+
+<p>When you iterate over rows and scan them into destination variables, Go performs data
+type conversions work for you, behind the scenes. It is based on the type of the
+destination variable. Being aware of this can clean up your code and help avoid
+repetitive work.</p>
+
+<p>For example, suppose you select some rows from a table that is defined with
+string columns, such as <code>VARCHAR(45)</code> or similar. You happen to know, however,
+that the table always contains numbers. If you pass a pointer to a string, Go
+will copy the bytes into the string. Now you can use <code>strconv.ParseInt()</code> or
+similar to convert the value to a number. You&rsquo;ll have to check for errors in the
+SQL operations, as well as errors parsing the integer. This is messy and
+tedious.</p>
+
+<p>Or, you can just pass <code>Scan()</code> a pointer to an integer. Go will detect that and
+call <code>strconv.ParseInt()</code> for you. If there&rsquo;s an error in conversion, the call
+to <code>Scan()</code> will return it. Your code is neater and smaller now. This is the
+recommended way to use <code>database/sql</code>.</p>

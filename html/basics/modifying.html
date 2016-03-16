@@ -1,0 +1,52 @@
+<h3>Statements that Modify Data</h3>
+
+<p>Now we&rsquo;re ready to see how to modify data and work with transactions. The
+distinction might seem artificial if you&rsquo;re used to programming languages that
+use a &ldquo;statement&rdquo; object for fetching rows as well as updating data, but in Go,
+there&rsquo;s an important reason for the difference.</p>
+
+<p>Use <code>Exec()</code>, preferably with a prepared statement, to accomplish an <code>INSERT</code>,
+<code>UPDATE</code>, <code>DELETE</code>, or other statement that doesn&rsquo;t return rows. The following
+example shows how to insert a row and inspect metadata about the operation:</p>
+
+<pre><code class="language-go">stmt, err := db.Prepare(&quot;INSERT INTO users(name) VALUES(?)&quot;)
+if err != nil {
+    log.Fatal(err)
+}
+res, err := stmt.Exec(&quot;Dolly&quot;)
+if err != nil {
+    log.Fatal(err)
+}
+lastId, err := res.LastInsertId()
+if err != nil {
+    log.Fatal(err)
+}
+rowCnt, err := res.RowsAffected()
+if err != nil {
+    log.Fatal(err)
+}
+log.Printf(&quot;ID = %d, affected = %d\n&quot;, lastId, rowCnt)
+</code></pre>
+
+<p>Executing the statement produces a <code>sql.Result</code> that gives access to statement
+metadata: the last inserted ID and the number of rows affected.</p>
+
+<p>What if you don&rsquo;t care about the result? What if you just want to execute a
+statement and check if there were any errors, but ignore the result? Wouldn&rsquo;t
+the following two statements do the same thing?</p>
+
+<pre><code class="language-go">_, err := db.Exec(&quot;DELETE FROM users&quot;)  // OK
+_, err := db.Query(&quot;DELETE FROM users&quot;) // BAD
+</code></pre>
+
+<p>The answer is no. They do <strong>not</strong> do the same thing, and <strong>you should never use
+<code>Query()</code> like this.</strong> The <code>Query()</code> will return a <code>sql.Rows</code>, which reserves a
+database connection until the <code>sql.Rows</code> is closed.
+Since there might be unread data (e.g. more data rows), the connection can not
+be used. In the example above, the connection will <em>never</em> be released again.
+The garbage collector will eventually close the underlying <code>net.Conn</code> for you,
+but this might take a long time. Moreover the database/sql package keeps
+tracking the connection in its pool, hoping that you release it at some point,
+so that the connection can be used again.
+This anti-pattern is therefore a good way to run out of resources (too many
+connections, for example).</p>

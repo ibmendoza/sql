@@ -1,0 +1,28 @@
+<h3>Overview</h3>
+
+<p>Courtesy: This material is the work of many authors at <a href="https://github.com/VividCortex/go-database-sql-tutorial">https://github.com/VividCortex/go-database-sql-tutorial</a></p>
+
+<p>To access databases in Go, you use a <code>sql.DB</code>. You use this type to create
+statements and transactions, execute queries, and fetch results.</p>
+
+<p>The first thing you should know is that <strong>a <code>sql.DB</code> isn&rsquo;t a database
+connection</strong>. It also doesn&rsquo;t map to any particular database software&rsquo;s notion
+of a &ldquo;database&rdquo; or &ldquo;schema.&rdquo; It&rsquo;s an abstraction of the interface and existence
+of a database, which might be as varied as a local file, accessed through a network
+connection, or in-memory and in-process.</p>
+
+<p>The <code>sql.DB</code> performs some important tasks for you behind the scenes:</p>
+
+<ul>
+<li>It opens and closes connections to the actual underlying database, via the driver.</li>
+<li>It manages a pool of connections as needed, which may be a variety of things as mentioned.</li>
+</ul>
+
+<p>The <code>sql.DB</code> abstraction is designed to keep you from worrying about how to
+manage concurrent access to the underlying datastore.  A connection is marked
+in-use when you use it to perform a task, and then returned to the available
+pool when it&rsquo;s not in use anymore. One consequence of this is that <strong>if you fail
+to release connections back to the pool, you can cause <code>db.SQL</code> to open a lot of
+connections</strong>, potentially running out of resources (too many connections, too
+many open file handles, lack of available network ports, etc). We&rsquo;ll discuss
+more about this later.</p>

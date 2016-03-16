@@ -1,0 +1,36 @@
+<h3>Preparing Queries</h3>
+
+<p>You should, in general, always prepare queries to be used multiple times. The
+result of preparing the query is a prepared statement, which can have
+placeholders (a.k.a. bind values) for parameters that you&rsquo;ll provide when you
+execute the statement.  This is much better than concatenating strings, for all
+the usual reasons (avoiding SQL injection attacks, for example).</p>
+
+<p>In MySQL, the parameter placeholder is <code>?</code>, and in PostgreSQL it is <code>$N</code>, where
+N is a number. SQLite accepts either of these.  In Oracle placeholders begin with
+a colon and are named, like <code>:param1</code>. We&rsquo;ll use <code>?</code> because we&rsquo;re using MySQL
+as our example.</p>
+
+<pre><code class="language-go">stmt, err := db.Prepare(&quot;select id, name from users where id = ?&quot;)
+if err != nil {
+    log.Fatal(err)
+}
+defer stmt.Close()
+rows, err := stmt.Query(1)
+if err != nil {
+    log.Fatal(err)
+}
+defer rows.Close()
+for rows.Next() {
+    // ...
+}
+if err = rows.Err(); err != nil {
+    log.Fatal(err)
+}
+</code></pre>
+
+<p>Under the hood, <code>db.Query()</code> actually prepares, executes, and closes a prepared
+statement. That&rsquo;s three round-trips to the database. If you&rsquo;re not careful, you
+can triple the number of database interactions your application makes! Some
+drivers can avoid this in specific cases,
+but not all drivers do. See <a href="prepared.html">prepared statements</a> for more.</p>

@@ -1,0 +1,31 @@
+<h3>Importing a Database Driver</h3>
+
+<p>To use <code>database/sql</code> you&rsquo;ll need the package itself, as well as a driver for
+the specific database you want to use.</p>
+
+<p>You generally shouldn&rsquo;t use driver packages directly, although some drivers
+encourage you to do so. (In our opinion, it&rsquo;s usually a bad idea.) Instead, your
+code should only refer to types defined in <code>database/sql</code>, if possible. This
+helps avoid making your code dependent on the driver, so that you can change the
+underlying driver (and thus the database you&rsquo;re accessing) with minimal code
+changes. It also forces you to use the Go idioms instead of ad-hoc idioms that a
+particular driver author may have provided.</p>
+
+<p>In this documentation, we&rsquo;ll use the excellent <a href="https://github.com/go-sql-driver/mysql">MySQL
+drivers</a> from @julienschmidt and @arnehormann
+ for examples.</p>
+
+<p>Add the following to the top of your Go source file:</p>
+
+<pre><code class="language-go">import (
+    &quot;database/sql&quot;
+    _ &quot;github.com/go-sql-driver/mysql&quot;
+)
+</code></pre>
+
+<p>Notice that we&rsquo;re loading the driver anonymously, aliasing its package qualifier
+to <code>_</code> so none of its exported names are visible to our code. Under the hood,
+the driver registers itself as being available to the <code>database/sql</code> package,
+but in general nothing else happens.</p>
+
+<p>Now you&rsquo;re ready to access a database.</p>
